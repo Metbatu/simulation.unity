@@ -36,8 +36,18 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private float timeToCrouch = 0.25f;
     [SerializeField] private Vector3 crouchingCenter = new Vector3(0,0.5f,0);
     [SerializeField] private Vector3 standingCenter = new Vector3(0,0,0);
+    private bool isCrouching;
+    private bool duringCrouchAnimation;
 
     [Header("Headbob Parameters")] 
+    [SerializeField] private float walkBobSpeed = 14.0f;
+    [SerializeField] private float walkBobAmount = 0.05f;
+    [SerializeField] private float sprintBobSpeed = 18.0f;
+    [SerializeField] private float sprintBobAmount = 0.11f;
+    [SerializeField] private float crouchBobSpeed = 8.0f;
+    [SerializeField] private float crouchBobAmount = 0.025f;
+    private float defaultYPos = 0;
+    private float timer;
     
     [Header("Look Parameters")] 
     [SerializeField, Range(1, 10)] private float lookSpeedX = 2.0f;
@@ -54,13 +64,11 @@ public class FirstPersonController : MonoBehaviour
 
     private float rotationX = 0;
     
-    private bool isCrouching;
-    private bool duringCrouchAnimation;
-    
     private void Awake()
     {
         playerCamera = GetComponentInChildren<Camera>();
         characterController = GetComponent<CharacterController>();
+        defaultYPos = playerCamera.transform.localPosition.y;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -77,6 +85,9 @@ public class FirstPersonController : MonoBehaviour
             
             if(canCrouch)
                 HandleCrouch();
+
+            if (canUseHeadbob)
+                HandleHeadbob();
             
             ApplyFinalMovements();
         }
@@ -88,6 +99,14 @@ public class FirstPersonController : MonoBehaviour
         float moveDirectionY = moveDirection.y;
         moveDirection = (transform.TransformDirection(Vector3.forward) * currentInput.x) + (transform.TransformDirection(Vector3.right) * currentInput.y);
         moveDirection.y = moveDirectionY;
+    }
+    
+    private void HandleMouseLook()
+    {
+        rotationX -= Input.GetAxis("Mouse Y") * lookSpeedY;
+        rotationX = Mathf.Clamp(rotationX, -upperLookLimit, lowerLookLimit);
+        playerCamera.transform.localRotation = Quaternion.Euler(rotationX, 0, 0);
+        transform.rotation *= Quaternion.Euler(0, Input.GetAxis("Mouse X") * lookSpeedX, 0);
     }
 
     private void HandleJump()
@@ -102,14 +121,21 @@ public class FirstPersonController : MonoBehaviour
             StartCoroutine(CrouchStand());
     }
 
-    private void HandleMouseLook()
+    private void HandleHeadbob()
     {
-        rotationX -= Input.GetAxis("Mouse Y") * lookSpeedY;
-        rotationX = Mathf.Clamp(rotationX, -upperLookLimit, lowerLookLimit);
-        playerCamera.transform.localRotation = Quaternion.Euler(rotationX, 0, 0);
-        transform.rotation *= Quaternion.Euler(0, Input.GetAxis("Mouse X") * lookSpeedX, 0);
-    }
+        if(!characterController.isGrounded)return;
 
+        if (Mathf.Abs(moveDirection.x) > 0.1f || Mathf.Abs(moveDirection.z) > 0.1f)
+        {
+            timer += Time.deltaTime * (isCrouching ? crouchBobSpeed : IsSprinting ? sprintBobSpeed : walkBobSpeed);
+            playerCamera.transform.localPosition = new Vector3(
+                playerCamera.transform.localPosition.x,
+                defaultYPos + Mathf.Sin(timer) *
+                (isCrouching ? crouchBobAmount : IsSprinting ? sprintBobAmount : walkBobAmount),
+                playerCamera.transform.localPosition.z);
+        }
+    }
+    
     private void ApplyFinalMovements()
     {
         if (!characterController.isGrounded)
